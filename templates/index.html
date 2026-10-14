@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MaisonDrop — Transfert</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <main class="panel">
+        <header class="top">
+            <div>
+                <div class="brand">MaisonDrop</div>
+                <p class="muted">Transfert local vers ton PC</p>
+            </div>
+    
+            <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token"
+                value="{{ csrf_token() }}"><button class="secondary" type="submit">Verrouiller</button>
+            </form>
+      
+        </header>
+
+        <section class="sessions">
+            <form method="post" action="{{ url_for('revoke_sessions') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit">
+                        Révoquer toutes les sessions
+                    </button>
+                </form>
+        </section>
+        {% for category, message in get_flashed_messages(with_categories=true) %}<div class="notice {{ category }}">{{
+            message }}</div>{% endfor %}
+        <section class="upload-card">
+            <h1>Envoyer des fichiers</h1>
+            <p>Choisis des photos, vidéos, PDF ou autres fichiers depuis l’app Fichiers ou Photos de ton iPhone.</p>
+            <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="stack"
+                id="upload-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="picker"><span class="picker-icon">＋</span><span><strong>Choisir des
+                            fichiers</strong><small>Tu peux en sélectionner plusieurs</small></span><input type="file"
+                        name="files" id="files" multiple required></label>
+                <div id="selection" class="muted" aria-live="polite">Aucun fichier sélectionné</div>
+                <section id="progress-area" class="progress-area" hidden aria-live="polite">
+                    <div class="progress-head"><strong id="progress-title">Prêt à envoyer</strong><span
+                            id="progress-percent">0 %</span></div><progress id="progress-bar" max="100"
+                        value="0">0%</progress>
+                    <div id="progress-details" class="muted">0 octet envoyé</div>
+                </section>
+                <div id="result" class="notice" role="status" aria-live="polite" hidden></div>
+                <button type="submit"
+                    id="send-button">Envoyer vers le PC</button>
+                <button type="button" class="secondary" id="cancel-button" hidden>Annuler l’envoi</button>
+                <p class="hint">Les fichiers sont enregistrés dans <code>MaisonDrop\uploads</code>. Ils ne sont pas
+                    exécutés automatiquement.</p>
+            </form>
+        </section>
+        <section class="received">
+            <h2>Fichiers reçus</h2>{% if files %}<ul class="file-list">{% for file in files %}<li>
+                    <div class="file-meta"><strong>{{ file.name }}</strong><small>{{ "%.1f"|format(file.stat().st_size /
+                            1024) }} Ko · {{ file.stat().st_mtime|int }}</small></div><a
+                        href="{{ url_for('download', filename=file.name) }}">Télécharger</a>
+                </li>{% endfor %}</ul>{% else %}<p class="muted">Aucun fichier reçu pour le moment.</p>{% endif %}
+        </section>
+        <p class="footnote">Usage prévu sur ton réseau domestique de confiance. Ferme la fenêtre du serveur quand tu as
+            terminé.</p>
+    </main>
+    <script>
+        <!-- JS -->
+        const input = document.getElementById('files'), selection = document.getElementById('selection'), form = document.getElementById('upload-form'), button = document.getElementById('send-button'), cancelButton = document.getElementById('cancel-button'), progressArea = document.getElementById('progress-area'), progressBar = document.getElementById('progress-bar'), progressPercent = document.getElementById('progress-percent'), progressTitle = document.getElementById('progress-title'), progressDetails = document.getElementById('progress-details'), result = document.getElementById('result'); let activeRequest = null;
+        function formatBytes(bytes) {if (bytes === 0) return '0 octet'; const units = ['octets', 'Ko', 'Mo', 'Go', 'To']; const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return (bytes / Math.pow(1024, i)).toLocaleString('fr-FR', {maximumFractionDigits: i === 0 ? 0 : 2}) + ' ' + units[i];}
+        function showResult(message, kind) {result.hidden = false; result.className = 'notice ' + kind; result.textContent = message;}
+        function resetControls() {button.disabled = false; button.textContent = 'Envoyer vers le PC'; cancelButton.hidden = true; activeRequest = null;}
+        input.addEventListener('change', () => {const files = Array.from(input.files || []), total = files.reduce((s, f) => s + f.size, 0); selection.textContent = files.length ? files.length + ' fichier(s) sélectionné(s) · ' + formatBytes(total) : 'Aucun fichier sélectionné'; result.hidden = true;});
+        form.addEventListener('submit', (event) => {
+            event.preventDefault(); const files = Array.from(input.files || []); if (!files.length) {showResult('Choisis au moins un fichier avant de lancer l’envoi.', 'error'); return;} const totalBytes = files.reduce((s, f) => s + f.size, 0), data = new FormData(); files.forEach(f => data.append('files', f, f.name)); progressArea.hidden = false; result.hidden = true; progressBar.value = 0; progressPercent.textContent = '0 %'; progressTitle.textContent = 'Préparation de l’envoi…'; progressDetails.textContent = '0 octet envoyé sur ' + formatBytes(totalBytes); button.disabled = true; button.textContent = 'Envoi en cours…'; cancelButton.hidden = false;
+            const xhr = new XMLHttpRequest(); activeRequest = xhr; xhr.open('POST', form.action, true); xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest'); xhr.setRequestHeader('X-CSRF-Token', form.querySelector('[name=csrf_token]').value);
+            xhr.upload.addEventListener('progress', (e) => {const uploaded = Math.min(e.loaded, totalBytes); if (e.lengthComputable) {const percent = Math.min(100, Math.round(e.loaded / e.total * 100)); progressBar.value = percent; progressPercent.textContent = percent + ' %'; progressTitle.textContent = percent >= 100 ? 'Envoi terminé, vérification sur le PC…' : 'Envoi en cours…';} else {progressTitle.textContent = 'Envoi en cours…';} progressDetails.textContent = formatBytes(uploaded) + ' envoyés sur ' + formatBytes(totalBytes);});
+            xhr.addEventListener('load', () => {let payload = {}; try {payload = JSON.parse(xhr.responseText);} catch (_) { } if (xhr.status >= 200 && xhr.status < 300 && payload.ok) {progressBar.value = 100; progressPercent.textContent = '100 %'; progressTitle.textContent = 'Réception confirmée par le PC'; progressDetails.textContent = formatBytes(totalBytes) + ' envoyés · fichiers enregistrés sur le PC'; showResult('✓ ' + payload.message, 'success'); input.value = ''; selection.textContent = 'Aucun fichier sélectionné'; resetControls(); setTimeout(() => window.location.reload(), 1800);} else {progressTitle.textContent = 'Transfert non confirmé'; showResult(payload.error || 'Le PC n’a pas confirmé la réception. Vérifie la connexion et réessaie.', 'error'); resetControls();} });
+            xhr.addEventListener('error', () => {progressTitle.textContent = 'Connexion interrompue'; showResult('Impossible de joindre le PC. Vérifie le Wi-Fi et que MaisonDrop est lancé.', 'error'); resetControls();}); xhr.addEventListener('abort', () => {progressTitle.textContent = 'Envoi annulé'; showResult('Envoi annulé. Vérifie les fichiers reçus sur le PC avant de réessayer.', 'error'); resetControls();}); xhr.addEventListener('timeout', () => {progressTitle.textContent = 'Délai dépassé'; showResult('Le transfert a pris trop de temps. Vérifie la connexion puis réessaie.', 'error'); resetControls();}); xhr.timeout = 0; xhr.send(data);
+        });
+        cancelButton.addEventListener('click', () => {if (activeRequest) activeRequest.abort();});
+    </script>
+</body>
+
+</html>

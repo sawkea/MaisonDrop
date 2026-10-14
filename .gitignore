@@ -1,0 +1,26 @@
+Environnement Python
+.venv/
+pycache/
+*.py[cod]
+
+Fichiers sensibles de MaisonDrop
+pin.hash
+secret.key
+session_version.txt
+maisonDrop_qr.png
+READMEPRIVATE.md
+
+Fichiers et données envoyés ou générés par l'application
+uploads/
+logs/
+*.log
+
+Fichiers de sauvegarde et temporaires
+*.bak
+*.tmp
+
+Fichiers propres à Windows et aux éditeurs
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
